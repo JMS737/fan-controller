@@ -32,6 +32,7 @@ class FanController:
         self.pollingInterval = pollingInterval
         self.minSpeed = minSpeed
         self.temp = RollingAverage(30)
+        self.lastSpeed = 0
 
         self.logger = self._init_logger()
         self.logger.info('Fan Controller instance created')
@@ -68,7 +69,9 @@ class FanController:
         itemp = self.getTemperature()
         temp = self.getAverageTemperature()
         speed = self.getSpeed(temp)
-        self.fan.ChangeDutyCycle(speed)
+        if speed != self.lastSpeed:
+            self.fan.ChangeDutyCycle(speed)
+            self.lastSpeed = speed
 
         self.logger.debug(f'Temp: {itemp}, Avg Temp: {temp} Speed: {speed}')
 
