@@ -7,7 +7,7 @@ import RPi.GPIO as GPIO
 FAN_CURVE = [[40,0], [50,20], [60,50], [70,100]]
 
 class FanController:
-    def __init__(self, pin, frequency, minSpeed=20, pollingInterval=1):
+    def __init__(self, pin, frequency, minSpeed=30, pollingInterval=1):
         self.pollingInterval = pollingInterval
         self.minSpeed = minSpeed
 
@@ -50,11 +50,16 @@ class FanController:
         self.logger.debug(f'Temp: {temp}, Speed: {speed}')
 
     def getSpeed(self, temperature):
+        speed = 0
         for point in reversed(FAN_CURVE):
             if temperature >= point[0]:
-                return point[1]
+                speed = point[1]
+                break
         
-        return 0
+        if speed > 0 and speed < self.minSpeed:
+            speed = self.minSpeed
+
+        return speed
 
     def stop(self):
         self.logger.info('Stopping fan-controller...')
