@@ -1,21 +1,77 @@
+import logging
+import signal
+import sys
+import time
 import RPi.GPIO as GPIO
-from time import sleep
 
-ledpin = 12				# PWM pin connected to LED
-GPIO.setwarnings(False)			#disable warnings
-GPIO.setmode(GPIO.BOARD)		#set pin numbering system
-GPIO.setup(ledpin,GPIO.OUT, initial=GPIO.LOW)
-fan = GPIO.PWM(ledpin,25)		#create PWM instance with frequency
-fan.start(30)				#start PWM of required Duty Cycle
+FAN_CURVE = [[40,0], [50,20], [60,50], [70,100]]
 
-while True:
-    sleep(10)
-#    for duty in range(0,101,1):
-#        fan.ChangeDutyCycle(duty) #provide duty cycle in the range 0-100
-#        sleep(0.05)
-#    sleep(2)
-#    
-#    for duty in range(100,-1,-1):
-#        fan.ChangeDutyCycle(duty)
-#        sleep(0.05)
-#    sleep(2)
+class FanController:
+    def __init__(self, pin, frequency, minSpeed=20, pollingInterval=1):
+        self.pollingInterval = pollingInterval
+        self.minSpeed = minSpeed
+
+        self.logger = self._init_logger()
+        self.logger.info('Fan Controller instance created')
+        self.fan = self._init_gpio(pin, frequency)
+        signal.signal(signal.SIGTERM, self._handle_sigterm)
+
+    def _init_logger(self):
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.DEBUG)
+        stdout_handler = logging.StreamHandler()
+        stdout_handler.setLevel(logging.DEBUG)
+        stdout_handler.setFormatter(logging.Formatter('%(levelname)8s | %(message)s'))
+        logger.addHandler(stdout_handler)
+        return logger
+    
+    def _init_gpio(self, pin, freq):
+        GPIO.setmode(GPIO.BOARD)    #set pin numbering system
+        GPIO.setup(pin,GPIO.OUT, initial=GPIO.LOW)
+        fan = GPIO.PWM(pin, freq)
+        return fan
+    
+    def start(self):
+        self.fan.start(30)
+        self.logger.info('Fan Controller started')
+        try:
+            while True:
+                self.process()
+                time.sleep(self.pollingInterval)
+        except KeyboardInterrupt:
+            self.logger.warning('Keybord interrupt (SIGINT) received...')
+            self.stop()
+
+    def process(self):
+        temp = self.getTemperature()
+        speed = self.getSpeed(temp)
+        self.fan.ChangeDutyCycle(speed)
+
+        self.logger.debug(f'Temp: {temp}, Speed: {speed}')
+
+    def getSpeed(self, temperature):
+        for point in reversed(FAN_CURVE):
+            if temperature >= point[0]:
+                return point[1]
+        
+        return 0
+
+    def stop(self):
+        self.logger.info('Stopping fan-controller...')
+        GPIO.cleanup()
+        sys.exit(0)
+
+    def _handle_sigterm(self, sig, frame):
+        self.logger.warning('SIGTERM received...')
+        self.stop()
+
+    def getTemperature(self):
+        cpuTempFile = open("/sys/class/thermal/thermal_zone0/temp", "r")
+        cpuTemp = float(cpuTempFile.read()) / 1000
+        cpuTempFile.close()
+
+        return cpuTemp
+
+if __name__ == '__main__':
+    service = FanController(12, 25)
+    service.start()
