@@ -4,7 +4,7 @@ import sys
 import time
 import RPi.GPIO as GPIO
 
-FAN_CURVE = [[40,0], [50,20], [60,50], [70,100]]
+FAN_CURVE = [[40,0], [50,20], [60,50], [70,80]]
 
 class RollingAverage:
     def __init__(self, size):
