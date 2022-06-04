@@ -6,10 +6,32 @@ import RPi.GPIO as GPIO
 
 FAN_CURVE = [[40,0], [50,20], [60,50], [70,100]]
 
+class RollingAverage:
+    def __init__(self, size):
+        self.max = size
+        self.data = []
+
+    def append(self, x):
+        self.data.append(x)
+
+        if len(self.data) > self.max:
+            self.data.pop(0)
+
+    def average(self):
+        if len(self.data) == 0:
+            return 0
+
+        sum = 0
+        for i in self.data:
+            sum += i
+
+        return sum / len(self.data)
+
 class FanController:
     def __init__(self, pin, frequency, minSpeed=30, pollingInterval=1):
         self.pollingInterval = pollingInterval
         self.minSpeed = minSpeed
+        self.temp = RollingAverage(30)
 
         self.logger = self._init_logger()
         self.logger.info('Fan Controller instance created')
@@ -43,11 +65,12 @@ class FanController:
             self.stop()
 
     def process(self):
-        temp = self.getTemperature()
+        itemp = self.getTemperature()
+        temp = self.getAverageTemperature()
         speed = self.getSpeed(temp)
         self.fan.ChangeDutyCycle(speed)
 
-        self.logger.debug(f'Temp: {temp}, Speed: {speed}')
+        self.logger.debug(f'Temp: {itemp}, Avg Temp: {temp} Speed: {speed}')
 
     def getSpeed(self, temperature):
         speed = 0
@@ -76,6 +99,11 @@ class FanController:
         cpuTempFile.close()
 
         return cpuTemp
+
+    def getAverageTemperature(self):
+        currentTemp = self.getTemperature()
+        self.temp.append(currentTemp)
+        return self.temp.average()
 
 if __name__ == '__main__':
     service = FanController(12, 25)
